@@ -13,39 +13,93 @@
 #define BUFFER_SIZE 2048
 #define NAME_LENGTH 32
 
-
 volatile sig_atomic_t flag = 0;
 int sockfd = 0;
 char name[NAME_LENGTH];
 
-void str_overwrite_stdout() {
-  printf("%s", "> ");
-  fflush(stdout);
+void str_overwrite_stdout()
+{
+    printf("%s", "> ");
+    fflush(stdout);
 }
 
-void str_trim_lf (char* arr, int length) {
-  int i;
-  for (i = 0; i < length; i++) { // trim \n
-    if (arr[i] == '\n') {
-      arr[i] = '\0';
-      break;
+void str_trim_lf (char* arr, int length)
+{
+    int i;
+    for (i = 0; i < length; i++)
+    {                               // trim \n
+        if (arr[i] == '\n')
+        {
+            arr[i] = '\0';
+            break;
+        }
     }
-  }
 }
 
-void catch_ctrl_c_and_exit(int sig) {
+void catch_ctrl_c_and_exit(int sig)
+{
     flag = 1;
 }
 
-int main(int argc, char **argv){
-	if(argc != 2){
+void send_msg_handler()
+{
+    char message[BUFFER_SIZE] = {};
+	char buffer[BUFFER_SIZE + NAME_LENGTH] = {};
+
+    while(1)
+    {
+        str_overwrite_stdout();
+        fgets(message, BUFFER_SIZE, stdin);
+        str_trim_lf(message, BUFFER_SIZE);
+
+        if (strcmp(message, "exit") == 0)
+        {
+			break;
+        }
+        else
+        {
+            sprintf(buffer, "%s: %s\n", name, message);
+            send(sockfd, buffer, strlen(buffer), 0);
+        }
+
+		bzero(message, BUFFER_SIZE);
+        bzero(buffer, BUFFER_SIZE + NAME_LENGTH);
+  }
+
+  catch_ctrl_c_and_exit(2);
+}
+
+void receive_msg_handler()
+{
+	char message[BUFFER_SIZE] = {};
+    while (1)
+    {
+		int receive = recv(sockfd, message, BUFFER_SIZE, 0);
+        if (receive > 0)
+        {
+            printf("%s", message);
+            str_overwrite_stdout();
+        }
+        else if (receive == 0)
+        {
+			break;
+        }
+
+        bzero(message,BUFFER_SIZE);
+
+    }
+}
+
+int main(int argc, char **argv)
+{
+	if(argc != 2)
+    {
 		printf("Usage: %s <port>\n", argv[0]);
 		return EXIT_FAILURE;
 	}
 
-	char *ip = "127.0.0.1";
+    char *ip = "127.0.0.1";
 	int port = atoi(argv[1]);
-
 
 	signal(SIGINT, catch_ctrl_c_and_exit);
 
@@ -53,7 +107,8 @@ int main(int argc, char **argv){
     fgets(name, NAME_LENGTH, stdin);
     str_trim_lf(name, strlen(name));
 
-    if (strlen(name) > NAME_LENGTH -1 || strlen(name) < 2){
+    if (strlen(name) > NAME_LENGTH -1 || strlen(name) < 2)
+    {
 		printf("Name must be less than 30 and more than 2 characters.\n");
 		return EXIT_FAILURE;
 	}
@@ -66,11 +121,10 @@ int main(int argc, char **argv){
     server_addr.sin_addr.s_addr = inet_addr(ip);
     server_addr.sin_port = htons(port);
 
-
-
-  // Connect to Server
-  int err = connect(sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr));
-  if (err == -1) {
+    // Connect to Server
+    int err = connect(sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+    if (err == -1)
+    {
 		printf("ERROR: connect\n");
 		return EXIT_FAILURE;
 	}
@@ -80,7 +134,30 @@ int main(int argc, char **argv){
 
 	printf("=== WELCOME TO THE CHATROOM ===\n");
 
+	pthread_t send_msg_thread;
+    if(pthread_create(&send_msg_thread, NULL, (void *) send_msg_handler, NULL) != 0)
+    {
+		printf("ERROR: pthread\n");
+        return EXIT_FAILURE;
+    }
 
+	pthread_t receive_msg_thread;
+    if(pthread_create(&receive_msg_thread, NULL, (void *) receive_msg_handler, NULL) != 0)
+    {
+		printf("ERROR: pthread\n");
+		return EXIT_FAILURE;
+	}
 
-	return EXIT_SUCCESS;
+    while (1)
+    {
+		if(flag)
+		{
+			printf("\nBye\n");
+			break;
+        }
+	}
+
+	close(sockfd);
+
+    return EXIT_SUCCESS;
 }
