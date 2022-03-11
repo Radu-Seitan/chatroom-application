@@ -28,12 +28,6 @@ client_t *clients[MAX_CLIENTS];
 
 pthread_mutex_t clients_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-void str_overwrite_stdout()
-{
-    printf("\r%s", "> ");
-    fflush(stdout);
-}
-
 void str_trim_lf (char* arr, int length)
 {
     int i;
@@ -50,7 +44,11 @@ void str_trim_lf (char* arr, int length)
 /* Add clients to queue */
 void queue_add(client_t *cl)
 {
-	pthread_mutex_lock(&clients_mutex);
+	if(pthread_mutex_lock(&clients_mutex) != 0 )
+    {
+        perror("ERROR: Phtread mutex lock failed");
+        exit(EXIT_FAILURE);
+    }
 	for(int i=0; i < MAX_CLIENTS; i++)
     {
 		if(!clients[i])
@@ -59,13 +57,21 @@ void queue_add(client_t *cl)
 			break;
 		}
 	}
-	pthread_mutex_unlock(&clients_mutex);
+	if(pthread_mutex_unlock(&clients_mutex) != 0)
+    {
+        perror("ERROR: Phtread mutex unlock failed");
+        exit(EXIT_FAILURE);
+    }
 }
 
 /* Remove clients from queue */
 void queue_remove(int uid)
 {
-	pthread_mutex_lock(&clients_mutex);
+	if(pthread_mutex_lock(&clients_mutex) != 0 )
+    {
+        perror("ERROR: Phtread mutex lock failed");
+        exit(EXIT_FAILURE);
+    }
 	for(int i=0; i < MAX_CLIENTS; i++)
     {
 		if(clients[i])
@@ -77,7 +83,11 @@ void queue_remove(int uid)
 			}
 		}
 	}
-	pthread_mutex_unlock(&clients_mutex);
+	if(pthread_mutex_unlock(&clients_mutex) != 0)
+    {
+        perror("ERROR: Phtread mutex unlock failed");
+        exit(EXIT_FAILURE);
+    }
 }
 
 void print_ip_addr(struct sockaddr_in addr)
@@ -92,7 +102,11 @@ void print_ip_addr(struct sockaddr_in addr)
 /* Send message to all clients except sender */
 void send_message(char *message, int uid)
 {
-	pthread_mutex_lock(&clients_mutex);
+	if(pthread_mutex_lock(&clients_mutex) != 0 )
+    {
+        perror("ERROR: Phtread mutex lock failed");
+        exit(EXIT_FAILURE);
+    }
 	for(int i=0; i<MAX_CLIENTS; i++)
     {
 		if(clients[i])
@@ -107,7 +121,36 @@ void send_message(char *message, int uid)
 			}
 		}
 	}
-	pthread_mutex_unlock(&clients_mutex);
+	if(pthread_mutex_unlock(&clients_mutex) != 0)
+    {
+        perror("ERROR: Phtread mutex unlock failed");
+        exit(EXIT_FAILURE);
+    }
+}
+
+int check_username_already_exists(char *username)
+{
+    if(pthread_mutex_lock(&clients_mutex) != 0 )
+    {
+        perror("ERROR: Phtread mutex lock failed");
+        exit(EXIT_FAILURE);
+    }
+    for(int i=0; i<MAX_CLIENTS; i++)
+    {
+        if(clients[i])
+        {
+            if(strcmp(clients[i]->name,username)==0)
+            {
+                return 1;
+            }
+        }
+    }
+    if(pthread_mutex_unlock(&clients_mutex) != 0)
+    {
+        perror("ERROR: Phtread mutex unlock failed");
+        exit(EXIT_FAILURE);
+    }
+    return 0;
 }
 
 /* Handle all communication with the client */
@@ -128,10 +171,18 @@ void *handle_client(void *arg)
 	}
 	else
 	{
-		strcpy(client->name, name);
-		sprintf(buff_out, "%s has joined\n", client->name);
-		printf("%s", buff_out);
-		send_message(buff_out, client->uid);
+        if(check_username_already_exists(name)==0)
+		{
+		    strcpy(client->name, name);
+            sprintf(buff_out, "%s has joined\n", client->name);
+            printf("%s", buff_out);
+            send_message(buff_out, client->uid);
+		}
+		else
+        {
+            sprintf(buff_out, "Username already exists\n");
+            send(client->sockfd,buff_out,strlen(buff_out),0);
+        }
 	}
 
 	bzero(buff_out, BUFFER_SZ);
@@ -168,12 +219,19 @@ void *handle_client(void *arg)
     }
 
     /* Delete client from queue and yield thread */
-	close(client->sockfd);
+	if(close(client->sockfd) < 0)
+    {
+        perror("ERROR: Close client sockfd failed");
+        exit(EXIT_FAILURE);
+    }
     queue_remove(client->uid);
     free(client);
     client_count--;
-    pthread_detach(pthread_self());
-
+    if(pthread_detach(pthread_self()) != 0)
+    {
+        perror("ERROR: Phtread detach failed");
+        exit(EXIT_FAILURE);
+    }
 	return NULL;
 }
 
@@ -185,7 +243,7 @@ int main(int argc, char **argv)
 		return EXIT_FAILURE;
 	}
 
-	char *ip = "127.0.0.1";
+	char *ip = "0.0.0.0";
 	int port = atoi(argv[1]);
 
 	int option = 1;
@@ -196,15 +254,28 @@ int main(int argc, char **argv)
 
     /* Socket settings */
     listenfd = socket(AF_INET, SOCK_STREAM, 0);
+    if(listenfd < 0)
+    {
+        perror("ERROR: Socket failed");
+        return EXIT_FAILURE;
+    }
     server_addr.sin_family = AF_INET;
     server_addr.sin_addr.s_addr = inet_addr(ip);
     server_addr.sin_port = htons(port);
 
     /* Signals */
-	signal(SIGPIPE, SIG_IGN);
+    struct sigaction action_ignore;
+    memset(&action_ignore, 0x00, sizeof(struct sigaction));
+    action_ignore.sa_handler = SIG_IGN;
+    if(sigaction(SIGPIPE, &action_ignore, NULL) < 0)
+    {
+        perror("ERROR: Sigaction failed");
+        return EXIT_FAILURE;
+    }
+
 	if(setsockopt(listenfd, SOL_SOCKET,(SO_REUSEPORT | SO_REUSEADDR),(char*)&option,sizeof(option)) < 0)
     {
-		perror("ERROR: setsockopt failed");
+		perror("ERROR: Setsockopt failed");
         return EXIT_FAILURE;
 	}
 
@@ -228,6 +299,11 @@ int main(int argc, char **argv)
     {
         socklen_t client_len = sizeof(client_addr);
 		connfd = accept(listenfd, (struct sockaddr*)&client_addr, &client_len);
+		if(connfd < 0)
+        {
+            perror("ERROR: Accept failed");
+            return EXIT_FAILURE;
+        }
 
 		/* Check if max clients is reached */
 		if((client_count + 1) == MAX_CLIENTS)
@@ -240,13 +316,22 @@ int main(int argc, char **argv)
 
         /* Client settings */
 		client_t *client = (client_t *)malloc(sizeof(client_t));
+        if(client == NULL)
+        {
+            printf("Error: Memory not allocated");
+            return EXIT_FAILURE;
+        }
 		client->address = client_addr;
 		client->sockfd = connfd;
 		client->uid = uid++;
 
 		/* Add client to the queue and fork thread */
 		queue_add(client);
-		pthread_create(&thread_id, NULL, &handle_client, (void*)client);
+		if(pthread_create(&thread_id, NULL, &handle_client, (void*)client) !=0 )
+        {
+            perror("ERROR: Pthread create failed");
+            return EXIT_FAILURE;
+        }
 
 		/* Reduce CPU usage */
 		sleep(1);

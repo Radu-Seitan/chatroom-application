@@ -132,7 +132,21 @@ int main(int argc, char **argv)
 	// Send name
 	send(sockfd, name, NAME_LENGTH, 0);
 
-	printf("=== WELCOME TO THE CHATROOM ===\n");
+    char message[BUFFER_SIZE] = {};
+	int receive = recv(sockfd, message, BUFFER_SIZE, 0);
+    if (receive > 0)
+    {
+        printf("%s", message);
+        if(strcmp(message,"Username already exists")==0)
+        {
+            return EXIT_FAILURE;
+        }
+    }
+    else
+        if(receive==0)
+        {
+            printf("=== WELCOME TO THE CHATROOM ===\n");
+        }
 
 	pthread_t send_msg_thread;
     if(pthread_create(&send_msg_thread, NULL, (void *) send_msg_handler, NULL) != 0)
