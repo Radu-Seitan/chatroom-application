@@ -177,6 +177,9 @@ void *handle_client(void *arg)
             sprintf(buff_out, "%s has joined\n", client->name);
             printf("%s", buff_out);
             send_message(buff_out, client->uid);
+			bzero(buff_out, BUFFER_SZ);
+			sprintf(buff_out, "=== WELCOME TO THE CHATROOM ===");
+            send(client->sockfd,buff_out,strlen(buff_out),0);
 		}
 		else
         {
@@ -220,18 +223,18 @@ void *handle_client(void *arg)
 
     /* Delete client from queue and yield thread */
 	if(close(client->sockfd) < 0)
-    {
-        perror("ERROR: Close client sockfd failed");
-        exit(EXIT_FAILURE);
-    }
-    queue_remove(client->uid);
-    free(client);
-    client_count--;
-    if(pthread_detach(pthread_self()) != 0)
-    {
-        perror("ERROR: Phtread detach failed");
-        exit(EXIT_FAILURE);
-    }
+	{
+		perror("ERROR: Close client sockfd failed");
+		exit(EXIT_FAILURE);
+	}
+	queue_remove(client->uid);
+	free(client);
+	client_count--;
+	if(pthread_detach(pthread_self()) != 0)
+	{
+		perror("ERROR: Phtread detach failed");
+		exit(EXIT_FAILURE);
+	}
 	return NULL;
 }
 
@@ -273,7 +276,7 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
 
-	if(setsockopt(listenfd, SOL_SOCKET,(SO_REUSEPORT | SO_REUSEADDR),(char*)&option,sizeof(option)) < 0)
+	if(setsockopt(listenfd, SOL_SOCKET,(SO_REUSEADDR),(char*)&option,sizeof(option)) < 0)
     {
 		perror("ERROR: Setsockopt failed");
         return EXIT_FAILURE;
@@ -326,12 +329,12 @@ int main(int argc, char **argv)
 		client->uid = uid++;
 
 		/* Add client to the queue and fork thread */
-		queue_add(client);
 		if(pthread_create(&thread_id, NULL, &handle_client, (void*)client) !=0 )
         {
             perror("ERROR: Pthread create failed");
             return EXIT_FAILURE;
         }
+		queue_add(client);
 
 		/* Reduce CPU usage */
 		sleep(1);
