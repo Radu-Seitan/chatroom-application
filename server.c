@@ -183,7 +183,7 @@ void *handle_client(void *arg)
 		}
 		else
         {
-            sprintf(buff_out, "Username already exists\n");
+            sprintf(buff_out, "Username already exists");
             send(client->sockfd,buff_out,strlen(buff_out),0);
         }
 	}
