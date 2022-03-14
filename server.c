@@ -220,18 +220,18 @@ void *handle_client(void *arg)
 
     /* Delete client from queue and yield thread */
 	if(close(client->sockfd) < 0)
-    {
-        perror("ERROR: Close client sockfd failed");
-        exit(EXIT_FAILURE);
-    }
-    queue_remove(client->uid);
-    free(client);
-    client_count--;
-    if(pthread_detach(pthread_self()) != 0)
-    {
-        perror("ERROR: Phtread detach failed");
-        exit(EXIT_FAILURE);
-    }
+	{
+		perror("ERROR: Close client sockfd failed");
+		exit(EXIT_FAILURE);
+	}
+	queue_remove(client->uid);
+	free(client);
+	client_count--;
+	if(pthread_detach(pthread_self()) != 0)
+	{
+		perror("ERROR: Phtread detach failed");
+		exit(EXIT_FAILURE);
+	}
 	return NULL;
 }
 
@@ -273,7 +273,7 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
 
-	if(setsockopt(listenfd, SOL_SOCKET,(SO_REUSEPORT | SO_REUSEADDR),(char*)&option,sizeof(option)) < 0)
+	if(setsockopt(listenfd, SOL_SOCKET,(SO_REUSEADDR),(char*)&option,sizeof(option)) < 0)
     {
 		perror("ERROR: Setsockopt failed");
         return EXIT_FAILURE;
