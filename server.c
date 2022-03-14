@@ -128,6 +128,28 @@ void send_message(char *message, int uid)
     }
 }
 
+void print()
+{
+    if (pthread_mutex_lock(&clients_mutex) != 0)
+    {
+        perror("ERROR: Phtread mutex lock failed");
+        exit(EXIT_FAILURE);
+    }
+    for (int i = 0; i < MAX_CLIENTS; i++)
+    {
+        if (clients[i])
+        {
+            printf("%d ", clients[i]->uid);
+        }
+    }
+    printf("\n");
+    if (pthread_mutex_unlock(&clients_mutex) != 0)
+    {
+        perror("ERROR: Phtread mutex unlock failed");
+        exit(EXIT_FAILURE);
+    }
+}
+
 int check_username_already_exists(char *username)
 {
     if(pthread_mutex_lock(&clients_mutex) != 0 )
@@ -135,13 +157,15 @@ int check_username_already_exists(char *username)
         perror("ERROR: Phtread mutex lock failed");
         exit(EXIT_FAILURE);
     }
+    int exists_flag = 0;
     for(int i=0; i<MAX_CLIENTS; i++)
     {
         if(clients[i])
         {
             if(strcmp(clients[i]->name,username)==0)
             {
-                return 1;
+                exists_flag = 1;
+                break;
             }
         }
     }
@@ -150,43 +174,19 @@ int check_username_already_exists(char *username)
         perror("ERROR: Phtread mutex unlock failed");
         exit(EXIT_FAILURE);
     }
-    return 0;
+    return exists_flag;
 }
 
 /* Handle all communication with the client */
 void *handle_client(void *arg)
 {
     char buff_out[BUFFER_SZ];
-	char name[32];
 	int leave_flag = 0;
-
 	client_count++;
 	client_t *client = (client_t *)arg;
 
-	// Name
-	if(recv(client->sockfd, name, 32, 0) <= 0 || strlen(name) <  2 || strlen(name) >= 32-1)
-    {
-		printf("Didn't enter the name.\n");
-		leave_flag = 1;
-	}
-	else
-	{
-        if(check_username_already_exists(name)==0)
-		{
-		    strcpy(client->name, name);
-            sprintf(buff_out, "%s has joined\n", client->name);
-            printf("%s", buff_out);
-            send_message(buff_out, client->uid);
-		}
-		else
-        {
-            sprintf(buff_out, "Username already exists\n");
-            send(client->sockfd,buff_out,strlen(buff_out),0);
-        }
-	}
-
 	bzero(buff_out, BUFFER_SZ);
-
+  
 	while(1)
     {
         if (leave_flag)
@@ -313,7 +313,7 @@ int main(int argc, char **argv)
 			close(connfd);
 			continue;
 		}
-
+        
         /* Client settings */
 		client_t *client = (client_t *)malloc(sizeof(client_t));
         if(client == NULL)
@@ -324,16 +324,38 @@ int main(int argc, char **argv)
 		client->address = client_addr;
 		client->sockfd = connfd;
 		client->uid = uid++;
-
-		/* Add client to the queue and fork thread */
-		queue_add(client);
-		if(pthread_create(&thread_id, NULL, &handle_client, (void*)client) !=0 )
+        
+        char buff_out[BUFFER_SZ];
+        char name[32];
+        if (recv(client->sockfd, name, 32, 0) <= 0 || strlen(name) < 2 || strlen(name) >= 32 - 1)
         {
-            perror("ERROR: Pthread create failed");
-            return EXIT_FAILURE;
+            printf("Didn't enter the name.\n");
+        }
+        else
+        {
+            if (check_username_already_exists(name) == 0)
+            {
+                strcpy(client->name, name);
+                sprintf(buff_out, "%s has joined\n", client->name);
+                printf("%s", buff_out);
+                send_message(buff_out, client->uid);
+                sprintf(buff_out, "Username does not exist\n");
+                send(client->sockfd, buff_out, strlen(buff_out), 0);
+
+                queue_add(client);
+                if (pthread_create(&thread_id, NULL, &handle_client, (void*)client) != 0)
+                {
+                    perror("ERROR: Pthread create failed");
+                    return EXIT_FAILURE;
+                }
+            }
+            else
+            {
+                sprintf(buff_out, "Username already exists\n");
+                send(client->sockfd, buff_out, strlen(buff_out), 0);
+            }
         }
 
-		/* Reduce CPU usage */
 		sleep(1);
     }
 	return EXIT_SUCCESS;
