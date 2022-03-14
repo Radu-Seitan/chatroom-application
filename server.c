@@ -128,28 +128,6 @@ void send_message(char *message, int uid)
     }
 }
 
-void print()
-{
-    if (pthread_mutex_lock(&clients_mutex) != 0)
-    {
-        perror("ERROR: Phtread mutex lock failed");
-        exit(EXIT_FAILURE);
-    }
-    for (int i = 0; i < MAX_CLIENTS; i++)
-    {
-        if (clients[i])
-        {
-            printf("%d ", clients[i]->uid);
-        }
-    }
-    printf("\n");
-    if (pthread_mutex_unlock(&clients_mutex) != 0)
-    {
-        perror("ERROR: Phtread mutex unlock failed");
-        exit(EXIT_FAILURE);
-    }
-}
-
 int check_username_already_exists(char *username)
 {
     if(pthread_mutex_lock(&clients_mutex) != 0 )
