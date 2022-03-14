@@ -101,18 +101,7 @@ int main(int argc, char **argv)
     char *ip = "127.0.0.1";
 	int port = atoi(argv[1]);
 
-	signal(SIGINT, catch_ctrl_c_and_exit);
-
-	printf("Please enter your name: ");
-    fgets(name, NAME_LENGTH, stdin);
-    str_trim_lf(name, strlen(name));
-
-    if (strlen(name) > NAME_LENGTH -1 || strlen(name) < 2)
-    {
-		printf("Name must be less than 30 and more than 2 characters.\n");
-		return EXIT_FAILURE;
-	}
-   
+	signal(SIGINT, catch_ctrl_c_and_exit);   
     struct sockaddr_in server_addr;
 
 	/* Socket settings */
@@ -128,52 +117,73 @@ int main(int argc, char **argv)
 		printf("ERROR: connect\n");
 		return EXIT_FAILURE;
 	}
-
-	// Send name
-	send(sockfd, name, NAME_LENGTH, 0);
     char message[BUFFER_SIZE];
-    memset(message, 0, BUFFER_SIZE);
-	int receive = recv(sockfd, message, BUFFER_SIZE, 0);
-    if (receive > 0)
+    int receive, receive_pass;
+    int flag_pass = 0;
+    while (1)
     {
-        if(strcmp(message,"Username already exists\n")==0)
+        printf("Please enter your name: ");
+        fgets(name, NAME_LENGTH, stdin);
+        str_trim_lf(name, strlen(name));
+
+        if (strlen(name) > NAME_LENGTH - 1 || strlen(name) < 2)
         {
-            printf("%s",message);
-            exit(EXIT_FAILURE);
+            printf("Name must be less than 30 and more than 2 characters.\n");
         }
         else
         {
+            // Send name
+            send(sockfd, name, NAME_LENGTH, 0);
             memset(message, 0, BUFFER_SIZE);
-            printf("Please enter the password: ");
-            fgets(password, 10, stdin);
-            str_trim_lf(password, strlen(password));
-            send(sockfd, password, 10, 0);
-            int receive_pass = recv(sockfd, message, BUFFER_SIZE, 0);
-            if (receive_pass > 0)
+            receive = recv(sockfd, message, BUFFER_SIZE, 0);
+            if (receive > 0)
             {
-                printf("%s", message);
-                if (strcmp(message, "Wrong password\n") == 0)
+                if (strcmp(message, "Username already exists\n") == 0)
                 {
-                    exit(EXIT_FAILURE);
+                    printf("%s", message);
                 }
                 else
                 {
-                    printf("=== WELCOME TO THE CHATROOM ===\n");
+                    while (1)
+                    {
+                        memset(message, 0, BUFFER_SIZE);
+                        printf("Please enter the password: ");
+                        fgets(password, 10, stdin);
+                        str_trim_lf(password, strlen(password));
+                        send(sockfd, password, 10, 0);
+                        receive_pass = recv(sockfd, message, BUFFER_SIZE, 0);
+                        if (receive_pass > 0)
+                        {
+                            if (strcmp(message, "Wrong password\n") == 0)
+                            {
+                                printf("%s", message);
+                            }
+                            else
+                            {
+                                printf("=== WELCOME TO THE CHATROOM ===\n");
+                                flag_pass = 1;
+                                break;
+                            }
+                        }
+                        else if (receive_pass < 0)
+                        {
+                            perror("ERROR: recv failed\n");
+                            exit(EXIT_FAILURE);
+                        }
+                    }
+                    if (flag_pass == 1)
+                    {
+                        break;
+                    }
                 }
             }
-            else if (receive_pass < 0)
+            else if (receive < 0)
             {
                 perror("ERROR: recv failed\n");
                 exit(EXIT_FAILURE);
             }
         }
     }
-    else if (receive < 0)
-    {
-        perror("ERROR: recv failed\n");
-        exit(EXIT_FAILURE);
-    }
-  
 	pthread_t send_msg_thread;
     if(pthread_create(&send_msg_thread, NULL, (void *) send_msg_handler, NULL) != 0)
     {

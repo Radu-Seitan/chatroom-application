@@ -303,48 +303,63 @@ int main(int argc, char **argv)
         
         char buff_out[BUFFER_SZ] = {};
         char name[32],password[10];
-        if (recv(client->sockfd, name, 32, 0) <= 0 || strlen(name) < 2 || strlen(name) >= 32 - 1)
+        int receive;
+        while (1)
         {
-            printf("Didn't enter the name.\n");
-        }
-        else
-        {
-            memset(buff_out, 0, BUFFER_SZ);
-            if (check_username_already_exists(name) == 0)
+            if ((receive=recv(client->sockfd, name, 32, 0)) < 0)
             {
-                strcpy(client->name, name);
-                sprintf(buff_out, "Username does not exist\n");
-                send(client->sockfd, buff_out, strlen(buff_out), 0); 
-                if (recv(client->sockfd, password, 10, 0) > 0) 
-                {
-                    memset(buff_out, 0, BUFFER_SZ);
-                    if (strcmp(password, chat_password) == 0)
-                    {
-                        sprintf(buff_out, "%s has joined\n", client->name);
-                        printf("%s", buff_out);
-                        send_message(buff_out, client->uid);
-                        sprintf(buff_out, "Password correct\n");
-                        send(client->sockfd, buff_out, strlen(buff_out), 0);
-
-                        queue_add(client);
-                        client_count++;
-                        if (pthread_create(&thread_id, NULL, &handle_client, (void*)client) != 0)
-                        {
-                            perror("ERROR: Pthread create failed");
-                            return EXIT_FAILURE;
-                        }
-                    }
-                    else
-                    {
-                        sprintf(buff_out, "Wrong password\n");
-                        send(client->sockfd, buff_out, strlen(buff_out), 0);
-                    }
-                }
+                perror("ERROR: recv failed\n");
+                exit(EXIT_FAILURE);
+            }
+           
+            else if (strlen(name) > 32 - 1 || strlen(name) < 2)
+            {
+                printf("Name must be less than 30 and more than 2 characters.\n");
             }
             else
             {
-                sprintf(buff_out, "Username already exists\n");
-                send(client->sockfd, buff_out, strlen(buff_out), 0);
+                memset(buff_out, 0, BUFFER_SZ);
+                if (check_username_already_exists(name) == 0)
+                {
+                    strcpy(client->name, name);
+                    sprintf(buff_out, "Username does not exist\n");
+                    send(client->sockfd, buff_out, strlen(buff_out), 0);
+                    while (1)
+                    {
+                        if (recv(client->sockfd, password, 10, 0) > 0)
+                        {
+                            memset(buff_out, 0, BUFFER_SZ);
+                            if (strcmp(password, chat_password) == 0)
+                            {
+                                sprintf(buff_out, "%s has joined\n", client->name);
+                                printf("%s", buff_out);
+                                send_message(buff_out, client->uid);
+                                sprintf(buff_out, "Password correct\n");
+                                send(client->sockfd, buff_out, strlen(buff_out), 0);
+
+                                queue_add(client);
+                                client_count++;
+                                if (pthread_create(&thread_id, NULL, &handle_client, (void*)client) != 0)
+                                {
+                                    perror("ERROR: Pthread create failed");
+                                    return EXIT_FAILURE;
+                                }
+                                break;
+                            }
+                            else
+                            {
+                                sprintf(buff_out, "Wrong password\n");
+                                send(client->sockfd, buff_out, strlen(buff_out), 0);
+                            }
+                        }
+                    }
+                    break;
+                }
+                else
+                {
+                    sprintf(buff_out, "Username already exists\n");
+                    send(client->sockfd, buff_out, strlen(buff_out), 0);
+                }
             }
         }
 
