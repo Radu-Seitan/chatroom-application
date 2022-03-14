@@ -15,7 +15,7 @@
 
 volatile sig_atomic_t flag = 0;
 int sockfd = 0;
-char name[NAME_LENGTH];
+char name[NAME_LENGTH],password[10];
 
 void str_overwrite_stdout()
 {
@@ -131,18 +131,47 @@ int main(int argc, char **argv)
 
 	// Send name
 	send(sockfd, name, NAME_LENGTH, 0);
-    char message[BUFFER_SIZE] = {};
+    char message[BUFFER_SIZE];
+    memset(message, 0, BUFFER_SIZE);
 	int receive = recv(sockfd, message, BUFFER_SIZE, 0);
     if (receive > 0)
     {
         if(strcmp(message,"Username already exists\n")==0)
         {
+            printf("%s",message);
             exit(EXIT_FAILURE);
         }
         else
         {
-            printf("=== WELCOME TO THE CHATROOM ===\n");
+            memset(message, 0, BUFFER_SIZE);
+            printf("Please enter the password: ");
+            fgets(password, 10, stdin);
+            str_trim_lf(password, strlen(password));
+            send(sockfd, password, 10, 0);
+            int receive_pass = recv(sockfd, message, BUFFER_SIZE, 0);
+            if (receive_pass > 0)
+            {
+                printf("%s", message);
+                if (strcmp(message, "Wrong password\n") == 0)
+                {
+                    exit(EXIT_FAILURE);
+                }
+                else
+                {
+                    printf("=== WELCOME TO THE CHATROOM ===\n");
+                }
+            }
+            else if (receive_pass < 0)
+            {
+                perror("ERROR: recv failed\n");
+                exit(EXIT_FAILURE);
+            }
         }
+    }
+    else if (receive < 0)
+    {
+        perror("ERROR: recv failed\n");
+        exit(EXIT_FAILURE);
     }
   
 	pthread_t send_msg_thread;
@@ -152,6 +181,12 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
 
+    pthread_t receive_msg_thread;
+    if (pthread_create(&receive_msg_thread, NULL, (void*)receive_msg_handler, NULL) != 0)
+    {
+        printf("ERROR: pthread\n");
+        return EXIT_FAILURE;
+    }
 
     while (1)
     {

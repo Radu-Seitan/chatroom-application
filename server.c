@@ -15,6 +15,7 @@
 
 static _Atomic unsigned int client_count = 0;
 static int uid = 10;
+char chat_password[10] = "1234";
 
 /* Client structure */
 typedef struct{
@@ -158,12 +159,9 @@ int check_username_already_exists(char *username)
 /* Handle all communication with the client */
 void *handle_client(void *arg)
 {
-    char buff_out[BUFFER_SZ];
+    char buff_out[BUFFER_SZ] = {};
 	int leave_flag = 0;
-	client_count++;
 	client_t *client = (client_t *)arg;
-
-	bzero(buff_out, BUFFER_SZ);
   
 	while(1)
     {
@@ -190,7 +188,7 @@ void *handle_client(void *arg)
 		}
 		else
         {
-			printf("ERROR: -1\n");
+			perror("ERROR: recv failed\n");
 			leave_flag = 1;
 		}
 		bzero(buff_out, BUFFER_SZ);
@@ -303,28 +301,44 @@ int main(int argc, char **argv)
 		client->sockfd = connfd;
 		client->uid = uid++;
         
-        char buff_out[BUFFER_SZ];
-        char name[32];
+        char buff_out[BUFFER_SZ] = {};
+        char name[32],password[10];
         if (recv(client->sockfd, name, 32, 0) <= 0 || strlen(name) < 2 || strlen(name) >= 32 - 1)
         {
             printf("Didn't enter the name.\n");
         }
         else
         {
+            memset(buff_out, 0, BUFFER_SZ);
             if (check_username_already_exists(name) == 0)
             {
                 strcpy(client->name, name);
-                sprintf(buff_out, "%s has joined\n", client->name);
-                printf("%s", buff_out);
-                send_message(buff_out, client->uid);
                 sprintf(buff_out, "Username does not exist\n");
-                send(client->sockfd, buff_out, strlen(buff_out), 0);
-
-                queue_add(client);
-                if (pthread_create(&thread_id, NULL, &handle_client, (void*)client) != 0)
+                send(client->sockfd, buff_out, strlen(buff_out), 0); 
+                if (recv(client->sockfd, password, 10, 0) > 0) 
                 {
-                    perror("ERROR: Pthread create failed");
-                    return EXIT_FAILURE;
+                    memset(buff_out, 0, BUFFER_SZ);
+                    if (strcmp(password, chat_password) == 0)
+                    {
+                        sprintf(buff_out, "%s has joined\n", client->name);
+                        printf("%s", buff_out);
+                        send_message(buff_out, client->uid);
+                        sprintf(buff_out, "Password correct\n");
+                        send(client->sockfd, buff_out, strlen(buff_out), 0);
+
+                        queue_add(client);
+                        client_count++;
+                        if (pthread_create(&thread_id, NULL, &handle_client, (void*)client) != 0)
+                        {
+                            perror("ERROR: Pthread create failed");
+                            return EXIT_FAILURE;
+                        }
+                    }
+                    else
+                    {
+                        sprintf(buff_out, "Wrong password\n");
+                        send(client->sockfd, buff_out, strlen(buff_out), 0);
+                    }
                 }
             }
             else
