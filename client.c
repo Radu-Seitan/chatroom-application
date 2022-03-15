@@ -15,44 +15,35 @@
 
 volatile sig_atomic_t flag = 0;
 int sockfd = 0;
-char name[NAME_LENGTH],password[10];
+char name[NAME_LENGTH], password[10];
 
-void str_overwrite_stdout()
-{
-    printf("%s", "> ");
+void str_overwrite_stdout() {
+    printf("> ");
     fflush(stdout);
 }
 
-void str_trim_lf (char* arr, int length)
-{
-    int i;
-    for (i = 0; i < length; i++)
-    {                               // trim \n
-        if (arr[i] == '\n')
-        {
+void str_trim_lf (char* arr, int length) {
+    for (int i = 0; i < length; i++) {  // trim \n
+        if (arr[i] == '\n') {
             arr[i] = '\0';
             break;
         }
     }
 }
 
-void catch_ctrl_c_and_exit(int sig)
-{
+void catch_ctrl_c_and_exit(int sig) {
     flag = 1;
 }
 
-int stream_read(int sockfd, char* buf, int len)
-{
+int stream_read(int sockfd, char* buf, int len) {
     int nread;
     int remaining = len;
-    while (remaining > 0)
-    {
+    while (remaining > 0) {
         if (-1 == (nread = read(sockfd, buf, remaining)))
             return -1;
-        for (int i = 0; i < nread; i++)
-        {
-            if (buf[i] == '\0');
-            {
+        for (int i = 0; i < nread; i++) {
+            if (buf[i] == '\0')
+            ; {
                 return 1;
             }
         }
@@ -64,12 +55,10 @@ int stream_read(int sockfd, char* buf, int len)
     return len - remaining;
 }
 
-int stream_write(int sockfd, char* buf, int len)
-{
+int stream_write(int sockfd, char* buf, int len) {
     int nwr;
     int remaining = len;
-    while (remaining > 0)
-    {
+    while (remaining > 0) {
         if (-1 == (nwr = write(sockfd, buf, remaining)))
             return -1;
         remaining -= nwr;
@@ -79,25 +68,22 @@ int stream_write(int sockfd, char* buf, int len)
 }
 
 
-void send_msg_handler()
-{
+void send_msg_handler() {
     char message[BUFFER_SIZE] = {};
 	char buffer[BUFFER_SIZE + NAME_LENGTH] = {};
 
-    while(1)
-    {
+    while(1) {
         str_overwrite_stdout();
         fgets(message, BUFFER_SIZE, stdin);
         str_trim_lf(message, BUFFER_SIZE);
 
         if (strcmp(message, "exit") == 0)
-        {
 			break;
-        }
-        else
-        {
+        else {
             sprintf(buffer, "%s: %s\n", name, message);
-            stream_write(sockfd, buffer, strlen(buffer));
+            if(stream_write(sockfd, buffer, strlen(buffer)) < 0) {
+                perror("ERROR: write failed");
+            }
         }
 
 		bzero(message, BUFFER_SIZE);
@@ -107,39 +93,32 @@ void send_msg_handler()
   catch_ctrl_c_and_exit(2);
 }
 
-void receive_msg_handler()
-{
+void receive_msg_handler() {
 	char message[BUFFER_SIZE] = {};
-    while (1)
-    {
+    while (1) {
 		int receive = stream_read(sockfd, message, BUFFER_SIZE);
-        if (receive > 0)
-        {
+        if (receive > 0) {
             printf("%s", message);
             str_overwrite_stdout();
-        }
-        else if (receive == 0)
-        {
+        } else if (receive == 0)
 			break;
-        }
-
         bzero(message,BUFFER_SIZE);
-
     }
 }
 
-int main(int argc, char **argv)
-{
-	if(argc != 2)
-    {
-		printf("Usage: %s <port>\n", argv[0]);
-		return EXIT_FAILURE;
+int main(int argc, char **argv) {
+	if(argc != 2) {
+		fprintf(stderr, "Usage: %s <port>\n", argv[0]);
+		exit(EXIT_FAILURE);
 	}
 
     char *ip = "127.0.0.1";
 	int port = atoi(argv[1]);
 
-	signal(SIGINT, catch_ctrl_c_and_exit);   
+	if(signal(SIGINT, catch_ctrl_c_and_exit) == SIG_ERR) {
+        perror("ERROR: signal failed");
+        exit(EXIT_FAILURE);
+    }   
     struct sockaddr_in server_addr;
 
 	/* Socket settings */
@@ -150,96 +129,79 @@ int main(int argc, char **argv)
 
     // Connect to Server
     int err = connect(sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr));
-    if (err == -1)
-    {
-		printf("ERROR: connect\n");
-		return EXIT_FAILURE;
+    if (err < 0) {
+		printf("ERROR: connect failed\n");
+		exit(EXIT_FAILURE);
 	}
     char message[BUFFER_SIZE];
     int receive, receive_pass;
     int flag_pass = 0;
-    while (1)
-    {
+    while (1) {
         printf("Please enter your name: ");
         fgets(name, NAME_LENGTH, stdin);
         str_trim_lf(name, strlen(name));
 
         if (strlen(name) > NAME_LENGTH - 1 || strlen(name) < 2)
-        {
             printf("Name must be less than 30 and more than 2 characters.\n");
-        }
-        else
-        {
+        else {
             // Send name
-            stream_write(sockfd, name, NAME_LENGTH);
+            if(stream_write(sockfd, name, NAME_LENGTH) < 0) {
+                perror("ERROR: write failed");
+                exit(EXIT_FAILURE);
+            }
             memset(message, 0, BUFFER_SIZE);
             receive = stream_read(sockfd, message, BUFFER_SIZE);
-            if (receive > 0)
-            {
-                if (strcmp(message, "Username already exists\n") == 0)
-                {
+            if (receive > 0) {
+                if (strcmp(message, "Username already exists\n") == 0) {
                     printf("%s", message);
-                }
-                else
-                {
-                    while (1)
-                    {
+                } else {
+                    while (1) {
                         memset(message, 0, BUFFER_SIZE);
                         printf("Please enter the password: ");
                         fgets(password, 10, stdin);
                         str_trim_lf(password, strlen(password));
-                        stream_write(sockfd, password, 10);
+                        if(stream_write(sockfd, password, 10) < 0) {
+                            perror("ERROR: write failed");
+                            exit(EXIT_FAILURE);
+                        }
                         receive_pass = stream_read(sockfd, message, BUFFER_SIZE);
-                        if (receive_pass > 0)
-                        {
-                            if (strcmp(message, "Wrong password\n") == 0)
-                            {
+                        if (receive_pass > 0) {
+                            if (strcmp(message, "Wrong password\n") == 0) {
                                 printf("%s", message);
-                            }
-                            else
-                            {
+                            } else {
                                 printf("=== WELCOME TO THE CHATROOM ===\n");
                                 flag_pass = 1;
                                 break;
                             }
                         }
-                        else if (receive_pass < 0)
-                        {
-                            perror("ERROR: recv failed\n");
+                        else if (receive_pass < 0) {
+                            perror("ERROR: read failed\n");
                             exit(EXIT_FAILURE);
                         }
                     }
                     if (flag_pass == 1)
-                    {
                         break;
-                    }
                 }
-            }
-            else if (receive < 0)
-            {
-                perror("ERROR: recv failed\n");
+            } else if (receive < 0) {
+                perror("ERROR: read failed\n");
                 exit(EXIT_FAILURE);
             }
         }
     }
 	pthread_t send_msg_thread;
-    if(pthread_create(&send_msg_thread, NULL, (void *) send_msg_handler, NULL) != 0)
-    {
-		printf("ERROR: pthread\n");
-        return EXIT_FAILURE;
+    if(pthread_create(&send_msg_thread, NULL, (void *) send_msg_handler, NULL) != 0) {
+		fprintf(stderr, "ERROR: pthread\n");
+        exit(EXIT_FAILURE);
     }
 
     pthread_t receive_msg_thread;
-    if (pthread_create(&receive_msg_thread, NULL, (void*)receive_msg_handler, NULL) != 0)
-    {
-        printf("ERROR: pthread\n");
-        return EXIT_FAILURE;
+    if (pthread_create(&receive_msg_thread, NULL, (void*)receive_msg_handler, NULL) != 0) {
+        fprintf(stderr, "ERROR: pthread\n");
+        exit(EXIT_FAILURE);
     }
 
-    while (1)
-    {
-		if(flag)
-		{
+    while (1) {
+		if(flag) {
 			printf("\nBye\n");
 			break;
         }
@@ -247,5 +209,5 @@ int main(int argc, char **argv)
 
 	close(sockfd);
 
-    return EXIT_SUCCESS;
+    exit(EXIT_SUCCESS);
 }
