@@ -1,4 +1,4 @@
-#include <sys/socket.h>
+﻿#include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <stdio.h>
@@ -100,6 +100,43 @@ void print_ip_addr(struct sockaddr_in addr)
         (addr.sin_addr.s_addr & 0xff000000) >> 24);
 }
 
+int stream_read(int sockfd, char *buf, int len) 
+{
+    int nread;
+    int remaining = len;
+    while (remaining > 0)
+    {
+        if (-1 == (nread = read(sockfd, buf, remaining)))
+            return -1;
+        for (int i = 0; i < nread; i++)
+        {
+            if (buf[i] == '\0');
+            {
+                return 1;
+            }
+        }
+        if (nread == 0) 
+            break;
+        remaining -= nread;
+        buf += nread;
+    }
+    return len - remaining;
+}
+
+int stream_write(int sockfd, char *buf, int len) 
+{
+    int nwr;
+    int remaining = len;
+    while (remaining > 0)
+    {
+        if (-1 == (nwr = write(sockfd, buf, remaining)))
+            return -1;
+        remaining -= nwr;
+        buf += nwr;
+    }
+    return len - remaining;
+}
+
 /* Send message to all clients except sender */
 void send_message(char *message, int uid)
 {
@@ -114,7 +151,7 @@ void send_message(char *message, int uid)
         {
 			if(clients[i]->uid != uid)
 			{
-				if(write(clients[i]->sockfd, message, strlen(message)) < 0)
+                if(stream_write(clients[i]->sockfd, message, strlen(message)) < 0)
 				{
 					perror("ERROR: write to descriptor failed");
 					break;
@@ -169,7 +206,7 @@ void *handle_client(void *arg)
         {
 			break;
 		}
-        int receive = recv(client->sockfd, buff_out, BUFFER_SZ, 0);
+        int receive = stream_read(client->sockfd, buff_out, BUFFER_SZ);
 		if (receive > 0)
         {
 			if(strlen(buff_out) > 0)
@@ -188,7 +225,7 @@ void *handle_client(void *arg)
 		}
 		else
         {
-			perror("ERROR: recv failed\n");
+			perror("ERROR: read failed\n");
 			leave_flag = 1;
 		}
 		bzero(buff_out, BUFFER_SZ);
@@ -306,9 +343,9 @@ int main(int argc, char **argv)
         int receive;
         while (1)
         {
-            if ((receive=recv(client->sockfd, name, 32, 0)) < 0)
+            if (stream_read(client->sockfd, name, 32) < 0)
             {
-                perror("ERROR: recv failed\n");
+                perror("ERROR: read failed\n");
                 exit(EXIT_FAILURE);
             }
            
@@ -323,10 +360,14 @@ int main(int argc, char **argv)
                 {
                     strcpy(client->name, name);
                     sprintf(buff_out, "Username does not exist\n");
-                    send(client->sockfd, buff_out, strlen(buff_out), 0);
+                    if (stream_write(client->sockfd, buff_out, strlen(buff_out)) < 0)
+                    {
+                        perror("ERROR: write to descriptor failed");
+                        exit(EXIT_FAILURE);
+                    }
                     while (1)
                     {
-                        if (recv(client->sockfd, password, 10, 0) > 0)
+                        if ((receive = stream_read(client->sockfd, password, 10)) > 0)
                         {
                             memset(buff_out, 0, BUFFER_SZ);
                             if (strcmp(password, chat_password) == 0)
@@ -335,7 +376,11 @@ int main(int argc, char **argv)
                                 printf("%s", buff_out);
                                 send_message(buff_out, client->uid);
                                 sprintf(buff_out, "Password correct\n");
-                                send(client->sockfd, buff_out, strlen(buff_out), 0);
+                                if (stream_write(client->sockfd, buff_out, strlen(buff_out)) < 0)
+                                {
+                                    perror("ERROR: write to descriptor failed");
+                                    exit(EXIT_FAILURE);
+                                }
 
                                 queue_add(client);
                                 client_count++;
@@ -349,8 +394,17 @@ int main(int argc, char **argv)
                             else
                             {
                                 sprintf(buff_out, "Wrong password\n");
-                                send(client->sockfd, buff_out, strlen(buff_out), 0);
+                                if (stream_write(client->sockfd, buff_out, strlen(buff_out)) < 0)
+                                {
+                                    perror("ERROR: write to descriptor failed");
+                                    exit(EXIT_FAILURE);
+                                }
                             }
+                        }
+                        else if (receive < 0)
+                        {
+                            perror("ERROR: read failed\n");
+                            exit(EXIT_FAILURE);
                         }
                     }
                     break;
@@ -358,7 +412,11 @@ int main(int argc, char **argv)
                 else
                 {
                     sprintf(buff_out, "Username already exists\n");
-                    send(client->sockfd, buff_out, strlen(buff_out), 0);
+                    if (stream_write(client->sockfd, buff_out, strlen(buff_out)) < 0)
+                    {
+                        perror("ERROR: write to descriptor failed");
+                        exit(EXIT_FAILURE);
+                    }
                 }
             }
         }
