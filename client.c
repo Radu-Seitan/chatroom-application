@@ -41,6 +41,44 @@ void catch_ctrl_c_and_exit(int sig)
     flag = 1;
 }
 
+int stream_read(int sockfd, char* buf, int len)
+{
+    int nread;
+    int remaining = len;
+    while (remaining > 0)
+    {
+        if (-1 == (nread = read(sockfd, buf, remaining)))
+            return -1;
+        for (int i = 0; i < nread; i++)
+        {
+            if (buf[i] == '\0');
+            {
+                return 1;
+            }
+        }
+        if (nread == 0)
+            break;
+        remaining -= nread;
+        buf += nread;
+    }
+    return len - remaining;
+}
+
+int stream_write(int sockfd, char* buf, int len)
+{
+    int nwr;
+    int remaining = len;
+    while (remaining > 0)
+    {
+        if (-1 == (nwr = write(sockfd, buf, remaining)))
+            return -1;
+        remaining -= nwr;
+        buf += nwr;
+    }
+    return len - remaining;
+}
+
+
 void send_msg_handler()
 {
     char message[BUFFER_SIZE] = {};
@@ -59,7 +97,7 @@ void send_msg_handler()
         else
         {
             sprintf(buffer, "%s: %s\n", name, message);
-            send(sockfd, buffer, strlen(buffer), 0);
+            stream_write(sockfd, buffer, strlen(buffer));
         }
 
 		bzero(message, BUFFER_SIZE);
@@ -74,7 +112,7 @@ void receive_msg_handler()
 	char message[BUFFER_SIZE] = {};
     while (1)
     {
-		int receive = recv(sockfd, message, BUFFER_SIZE, 0);
+		int receive = stream_read(sockfd, message, BUFFER_SIZE);
         if (receive > 0)
         {
             printf("%s", message);
@@ -133,9 +171,9 @@ int main(int argc, char **argv)
         else
         {
             // Send name
-            send(sockfd, name, NAME_LENGTH, 0);
+            stream_write(sockfd, name, NAME_LENGTH);
             memset(message, 0, BUFFER_SIZE);
-            receive = recv(sockfd, message, BUFFER_SIZE, 0);
+            receive = stream_read(sockfd, message, BUFFER_SIZE);
             if (receive > 0)
             {
                 if (strcmp(message, "Username already exists\n") == 0)
@@ -150,8 +188,8 @@ int main(int argc, char **argv)
                         printf("Please enter the password: ");
                         fgets(password, 10, stdin);
                         str_trim_lf(password, strlen(password));
-                        send(sockfd, password, 10, 0);
-                        receive_pass = recv(sockfd, message, BUFFER_SIZE, 0);
+                        stream_write(sockfd, password, 10);
+                        receive_pass = stream_read(sockfd, message, BUFFER_SIZE);
                         if (receive_pass > 0)
                         {
                             if (strcmp(message, "Wrong password\n") == 0)
