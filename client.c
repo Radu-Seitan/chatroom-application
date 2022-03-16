@@ -130,7 +130,7 @@ int main(int argc, char **argv) {
     // Connect to Server
     int err = connect(sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr));
     if (err < 0) {
-		printf("ERROR: connect failed\n");
+		perror("ERROR: connect failed\n");
 		exit(EXIT_FAILURE);
 	}
     char message[BUFFER_SIZE];
@@ -207,7 +207,10 @@ int main(int argc, char **argv) {
         }
 	}
 
-	close(sockfd);
+	if(close(sockfd) < 0) {
+        perror("ERROR: failed to close file descriptor");
+        exit(EXIT_FAILURE);
+    }
 
     exit(EXIT_SUCCESS);
 }

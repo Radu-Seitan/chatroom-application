@@ -271,14 +271,17 @@ int main(int argc, char **argv) {
 		if((client_count + 1) == MAX_CLIENTS) {
 			printf("Maximum clients reached. Rejected: ");
 			print_ip_addr(client_addr);
-			close(connfd);
+			if(close(connfd) < 0) {
+				perror("ERROR: Failed to close file descriptor");
+				exit(EXIT_FAILURE);
+			}
 			continue;
 		}
         
         /* Client settings */
 		client_t *client = (client_t *)malloc(sizeof(client_t));
         if(client == NULL) {
-            perror("Error: Memory not allocated");
+            perror("ERROR: Memory not allocated");
             exit(EXIT_FAILURE);
         }
 		client->address = client_addr;
